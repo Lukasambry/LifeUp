@@ -1,0 +1,44 @@
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.dev
+.env.prod
+.env.local
+.env.*.local
+
+# Build output
+dist/
+build/
+.next/
+generated/
+
+# Docker
+docker-compose.override.yml
+
+# Traefik
+traefik/letsencrypt/
+
+# Database backups
+backups/*.sql
+
+# Logs
+*.log
+npm-debug.log*
+
+####
+CLAUDE.md
+DOCKER.md
+.claude
