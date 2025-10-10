@@ -3,7 +3,7 @@
  * Handles JWT token generation and validation
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { JwtService as NestJwtService } from '@nestjs/jwt';
 
 export interface JwtPayload {
@@ -21,19 +21,46 @@ export interface TokenPair {
 }
 
 @Injectable()
-export class JwtService {
-  constructor(private readonly jwtService: NestJwtService) {}
+export class JwtService implements OnModuleInit {
+  private readonly jwtSecret: string;
+  private readonly jwtRefreshSecret: string;
+
+  constructor(private readonly jwtService: NestJwtService) {
+    // Validate required environment variables at construction
+    this.jwtSecret = this.getRequiredEnvVar('JWT_SECRET');
+    this.jwtRefreshSecret = this.getRequiredEnvVar('JWT_REFRESH_SECRET');
+  }
+
+  onModuleInit() {
+    // Double-check secrets are set on module initialization
+    if (!this.jwtSecret || !this.jwtRefreshSecret) {
+      throw new Error(
+        'FATAL: JWT secrets not configured. Application cannot start.',
+      );
+    }
+  }
+
+  private getRequiredEnvVar(name: string): string {
+    const value = process.env[name];
+    if (!value) {
+      throw new Error(
+        `FATAL: Required environment variable ${name} is not set. ` +
+          `Please set it in your .env file or environment configuration.`,
+      );
+    }
+    return value;
+  }
 
   generateAccessToken(payload: Omit<JwtPayload, 'iat' | 'exp'>): string {
     return this.jwtService.sign(payload, {
-      secret: process.env.JWT_SECRET || 'your-secret-key',
+      secret: this.jwtSecret,
       expiresIn: '15m', // 15 minutes
     });
   }
 
   generateRefreshToken(payload: Omit<JwtPayload, 'iat' | 'exp'>): string {
     return this.jwtService.sign(payload, {
-      secret: process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-key',
+      secret: this.jwtRefreshSecret,
       expiresIn: '7d', // 7 days
     });
   }
@@ -49,13 +76,13 @@ export class JwtService {
 
   verifyAccessToken(token: string): JwtPayload {
     return this.jwtService.verify(token, {
-      secret: process.env.JWT_SECRET || 'your-secret-key',
+      secret: this.jwtSecret,
     });
   }
 
   verifyRefreshToken(token: string): JwtPayload {
     return this.jwtService.verify(token, {
-      secret: process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-key',
+      secret: this.jwtRefreshSecret,
     });
   }
 

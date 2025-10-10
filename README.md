@@ -191,10 +191,28 @@ See `CLAUDE.md` for detailed guidance.
 ## 📚 Documentation
 
 - `CLAUDE.md` - Comprehensive architecture and development guide
+- `SECURITY.md` - **Security configuration and JWT setup (REQUIRED)**
 - `backend/README.md` - Backend-specific documentation
 - `frontend/README.md` - Frontend-specific documentation
 
-## 🔒 Environment Variables
+## 🔒 Security & Environment Variables
+
+**⚠️ IMPORTANT**: Before starting the application, you must configure JWT secrets. See [`SECURITY.md`](SECURITY.md) for detailed instructions.
+
+### Quick Setup
+
+1. Generate secure JWT secrets:
+```bash
+openssl rand -base64 32  # Run twice for two different secrets
+```
+
+2. Create `.env` file in project root:
+```env
+JWT_SECRET=<paste-first-secret-here>
+JWT_REFRESH_SECRET=<paste-second-secret-here>
+```
+
+The application **will not start** without these secrets configured.
 
 ### Backend (`backend/.env`)
 ```env
