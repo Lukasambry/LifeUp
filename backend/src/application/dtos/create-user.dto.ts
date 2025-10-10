@@ -12,6 +12,7 @@ export const CreateUserSchema = z.object({
     .string()
     .min(8, 'Password must be at least 8 characters')
     .max(100, 'Password is too long'),
+  roleId: z.string().min(1, 'Role ID is required'),
 });
 
 export type CreateUserDto = z.infer<typeof CreateUserSchema>;

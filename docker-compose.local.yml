@@ -71,6 +71,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-lifeup}?schema=public
       PORT: 3001
       FRONTEND_URL: http://lifeup.localhost
+      JWT_SECRET: ${JWT_SECRET:-please-set-jwt-secret-in-env-file}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-please-set-jwt-refresh-secret-in-env-file}
     volumes:
       - ./backend/src:/app/src
       - ./backend/prisma:/app/prisma
