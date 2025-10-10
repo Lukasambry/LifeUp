@@ -11,10 +11,15 @@ import { JwtPayload } from '@infrastructure/services/jwt.service';
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor() {
+    const jwtSecret = process.env.JWT_SECRET;
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (isProduction && !jwtSecret) {
+      throw new Error('JWT_SECRET environment variable must be set in production.');
+    }
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET || 'your-secret-key',
+      secretOrKey: jwtSecret || 'your-secret-key', // fallback only in non-production
     });
   }
 
