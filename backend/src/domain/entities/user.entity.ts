@@ -10,6 +10,8 @@ export interface UserProps {
   email: string;
   name: string;
   password: string;
+  roleId: string;
+  isPremium: boolean;
   isActive: boolean;
   createdAt?: Date;
   updatedAt?: Date;
@@ -19,6 +21,8 @@ export class User extends BaseEntity<string> {
   private _email: string;
   private _name: string;
   private _password: string;
+  private _roleId: string;
+  private _isPremium: boolean;
   private _isActive: boolean;
 
   private constructor(props: UserProps) {
@@ -26,6 +30,8 @@ export class User extends BaseEntity<string> {
     this._email = props.email;
     this._name = props.name;
     this._password = props.password;
+    this._roleId = props.roleId;
+    this._isPremium = props.isPremium;
     this._isActive = props.isActive;
   }
 
@@ -44,6 +50,14 @@ export class User extends BaseEntity<string> {
 
   get password(): string {
     return this._password;
+  }
+
+  get roleId(): string {
+    return this._roleId;
+  }
+
+  get isPremium(): boolean {
+    return this._isPremium;
   }
 
   get isActive(): boolean {
@@ -67,6 +81,24 @@ export class User extends BaseEntity<string> {
     this.touch();
   }
 
+  public updatePassword(password: string): void {
+    if (!password || password.length < 8) {
+      throw new Error('Password must be at least 8 characters long');
+    }
+    this._password = password;
+    this.touch();
+  }
+
+  public upgradeToPremium(): void {
+    this._isPremium = true;
+    this.touch();
+  }
+
+  public downgradeFromPremium(): void {
+    this._isPremium = false;
+    this.touch();
+  }
+
   public activate(): void {
     this._isActive = true;
     this.touch();
@@ -75,6 +107,10 @@ export class User extends BaseEntity<string> {
   public deactivate(): void {
     this._isActive = false;
     this.touch();
+  }
+
+  public validatePassword(minLength: number = 8): boolean {
+    return this._password && this._password.length >= minLength;
   }
 
   private isValidEmail(email: string): boolean {

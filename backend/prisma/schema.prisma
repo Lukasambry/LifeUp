@@ -14,14 +14,126 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Enums
+enum RoleType {
+  SUPER_ADMIN
+  ADMIN_LIFEUP
+  CLIENT
+}
+
+enum PermissionAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  MANAGE
+}
+
+enum PermissionResource {
+  USERS
+  ROLES
+  TASKS
+  QUESTS
+  REWARDS
+  CHALLENGES
+  MODULES
+  SETTINGS
+  ANALYTICS
+  LOGS
+}
+
+// Core Models
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
   name      String
   password  String
+  roleId    String   @map("role_id")
+  isPremium Boolean  @default(false) @map("is_premium")
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  // Relations
+  role          Role           @relation(fields: [roleId], references: [id])
+  activityLogs  ActivityLog[]
+  refreshTokens RefreshToken[]
+
   @@map("users")
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  type        RoleType @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  users           User[]
+  rolePermissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String             @id @default(cuid())
+  resource    PermissionResource
+  action      PermissionAction
+  description String?
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  // Relations
+  rolePermissions RolePermission[]
+
+  @@unique([resource, action])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String   @id @default(cuid())
+  roleId       String   @map("role_id")
+  permissionId String   @map("permission_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relations
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  action     String
+  resource   String
+  details    String?  @db.Text
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("activity_logs")
 }
