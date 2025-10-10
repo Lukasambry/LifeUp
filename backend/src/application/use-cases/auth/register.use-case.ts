@@ -1,36 +1,39 @@
 /**
- * Application Layer - Use Case
- * Orchestrates business logic, depends only on domain layer
+ * Application Layer - Register Use Case
+ * Handles user registration with role assignment
  */
 
-import { Inject, Injectable, ConflictException } from '@nestjs/common';
-import { User } from '@domain/entities/user.entity';
+import { Injectable, Inject, ConflictException } from '@nestjs/common';
 import {
-  IUserRepository,
   USER_REPOSITORY,
+  IUserRepository,
 } from '@domain/repositories/user.repository.interface';
 import {
-  IRoleRepository,
   ROLE_REPOSITORY,
+  IRoleRepository,
 } from '@domain/repositories/role.repository.interface';
-import { CreateUserDto } from '../dtos/create-user.dto';
-import { UserResponseDto } from '../dtos/user-response.dto';
+import { User } from '@domain/entities/user.entity';
+import { RoleType } from '@domain/entities/role.entity';
+import { RegisterDto } from '@application/dtos/auth/register.dto';
+import { AuthResponseDto } from '@application/dtos/auth/auth-response.dto';
 import { CryptoService } from '@infrastructure/services/crypto.service';
+import { JwtService } from '@infrastructure/services/jwt.service';
 import { SanitizationService } from '@infrastructure/services/sanitization.service';
 import { randomBytes } from 'crypto';
 
 @Injectable()
-export class CreateUserUseCase {
+export class RegisterUseCase {
   constructor(
     @Inject(USER_REPOSITORY)
     private readonly userRepository: IUserRepository,
     @Inject(ROLE_REPOSITORY)
     private readonly roleRepository: IRoleRepository,
     private readonly cryptoService: CryptoService,
+    private readonly jwtService: JwtService,
     private readonly sanitizationService: SanitizationService,
   ) {}
 
-  async execute(dto: CreateUserDto): Promise<UserResponseDto> {
+  async execute(dto: RegisterDto): Promise<AuthResponseDto> {
     // Sanitize and normalize inputs
     const sanitizedName = this.sanitizationService.sanitizeString(dto.name);
     const normalizedEmail = this.sanitizationService.normalizeEmail(dto.email);
@@ -43,37 +46,52 @@ export class CreateUserUseCase {
       throw new ConflictException('User with this email already exists');
     }
 
-    // Verify role exists
-    const role = await this.roleRepository.findById(dto.roleId);
-    if (!role) {
-      throw new ConflictException('Invalid role ID');
+    // Get CLIENT role (default for new registrations)
+    const clientRole = await this.roleRepository.findByType(RoleType.CLIENT);
+    if (!clientRole) {
+      throw new Error('CLIENT role not found in database');
     }
 
     // Hash password
     const hashedPassword = await this.cryptoService.hashPassword(dto.password);
 
-    // Create domain entity
+    // Create user entity
     const user = User.create({
       id: this.generateId(),
       email: normalizedEmail,
       name: sanitizedName,
       password: hashedPassword,
-      roleId: dto.roleId,
+      roleId: clientRole.id,
       isPremium: false,
       isActive: true,
     });
 
-    // Persist
+    // Save user
     const savedUser = await this.userRepository.create(user);
 
-    // Return DTO
-    return {
-      id: savedUser.id,
+    // Generate tokens
+    const tokens = this.jwtService.generateTokenPair({
+      sub: savedUser.id,
       email: savedUser.email,
-      name: savedUser.name,
-      isActive: savedUser.isActive,
-      createdAt: savedUser.createdAt,
-      updatedAt: savedUser.updatedAt,
+      roleId: savedUser.roleId,
+      roleType: clientRole.type,
+    });
+
+    return {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      user: {
+        id: savedUser.id,
+        email: savedUser.email,
+        name: savedUser.name,
+        role: {
+          id: clientRole.id,
+          name: clientRole.name,
+          type: clientRole.type,
+        },
+        isPremium: savedUser.isPremium,
+        isActive: savedUser.isActive,
+      },
     };
   }
 
