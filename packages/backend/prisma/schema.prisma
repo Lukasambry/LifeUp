@@ -1,0 +1,563 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// User & Auth
+model User {
+  id              String    @id @default(uuid())
+  email           String    @unique
+  username        String    @unique
+  passwordHash    String    @map("password_hash")
+  ssoProvider     SSOProvider? @map("sso_provider")
+  ssoId           String?   @map("sso_id")
+  avatarUrl       String?   @map("avatar_url")
+  level           Int       @default(1)
+  totalXp         BigInt    @default(0) @map("total_xp")
+  class           UserClass?
+  isHardcore      Boolean   @default(false) @map("is_hardcore")
+  trustScore      Int       @default(100) @map("trust_score")
+  isPublic        Boolean   @default(true) @map("is_public")
+  address         String?   // Encrypted
+  latitude        Float?
+  longitude       Float?
+  locationConsent Boolean   @default(false) @map("location_consent")
+  totpSecret      String?   @map("totp_secret") // Encrypted
+  passwordChangedAt DateTime? @map("password_changed_at")
+  failedLoginAttempts Int   @default(0) @map("failed_login_attempts")
+  lockedUntil     DateTime? @map("locked_until")
+  
+  deletedAt       DateTime? @map("deleted_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  stats           UserStats?
+  tasks           UserTask[]
+  completions     TaskCompletion[]
+  nfcTags         NfcTag[]
+  
+  sentFriendRequests     Friendship[] @relation("SentFriendships")
+  receivedFriendRequests Friendship[] @relation("ReceivedFriendships")
+  
+  guildMemberships GuildMember[]
+  ledGuild         Guild?        @relation("GuildLeader")
+  
+  messages         ChatMessage[]
+  notifications    Notification[]
+  achievements     UserAchievement[]
+  fraudFlags       FraudFlag[] @relation("UserFlags")
+  resolvedFlags    FraudFlag[] @relation("ResolverFlags")
+  
+  seasonProgress   SeasonProgress[]
+  userTalents      UserTalent[]
+  inventory        UserInventory[]
+  wallet           UserWallet?
+  transactions     WalletTransaction[]
+  
+  hardcoreSettings HardcoreSettings?
+  
+  ownTasks         Task[] @relation("CreatedTasks")
+  
+  challenged       Challenge[] @relation("ChallengedUser")
+  challenger       Challenge[] @relation("ChallengerUser")
+  wonChallenges    Challenge[] @relation("ChallengeWinner")
+
+  @@map("users")
+}
+
+enum SSOProvider {
+  GOOGLE
+  APPLE
+}
+
+enum UserClass {
+  WARRIOR
+  MAGE
+  THIEF
+  ARCHER
+  PALADIN
+  BARD
+}
+
+model UserStats {
+  id           String @id @default(uuid())
+  userId       String @unique @map("user_id")
+  user         User   @relation(fields: [userId], references: [id])
+  strength     Int    @default(0)
+  intelligence Int    @default(0)
+  agility      Int    @default(0)
+  endurance    Int    @default(0)
+  charisma     Int    @default(0)
+  wisdom       Int    @default(0)
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("user_stats")
+}
+
+// Tasks
+model Task {
+  id               String       @id @default(uuid())
+  name             String
+  description      String?
+  category         TaskCategory
+  type             TaskType
+  baseXp           Int          @map("base_xp")
+  cooldownMinutes  Int?         @map("cooldown_minutes")
+  isPredefined     Boolean      @map("is_predefined")
+  createdBy        String?      @map("created_by")
+  creator          User?        @relation("CreatedTasks", fields: [createdBy], references: [id])
+  requiresProof    Boolean      @default(false) @map("requires_proof")
+  maxDailyCompletions Int       @default(1) @map("max_daily_completions")
+  createdAt        DateTime     @default(now()) @map("created_at")
+
+  // Relations
+  userInstances    UserTask[]
+  completions      TaskCompletion[]
+  nfcTags          NfcTag[]     @relation("TaskNfcTags")
+  challenges       Challenge[]
+
+  @@unique([name, isPredefined], name: "name_isPredefined")
+  @@map("tasks")
+}
+
+enum TaskCategory {
+  STRENGTH
+  INTELLIGENCE
+  AGILITY
+  ENDURANCE
+  CHARISMA
+  WISDOM
+}
+
+enum TaskType {
+  DAILY
+  WEEKLY
+  MONTHLY
+  ONESHOT
+  REPEATABLE
+}
+
+model UserTask {
+  id              String    @id @default(uuid())
+  userId          String    @map("user_id")
+  user            User      @relation(fields: [userId], references: [id])
+  taskId          String    @map("task_id")
+  task            Task      @relation(fields: [taskId], references: [id])
+  isActive        Boolean   @map("is_active")
+  currentStreak   Int       @default(0) @map("current_streak")
+  bestStreak      Int       @default(0) @map("best_streak")
+  lastCompletedAt DateTime? @map("last_completed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@map("user_tasks")
+}
+
+model TaskCompletion {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  user         User     @relation(fields: [userId], references: [id])
+  taskId       String   @map("task_id")
+  task         Task     @relation(fields: [taskId], references: [id])
+  xpEarned     Int      @map("xp_earned")
+  multiplier   Float    @default(1.0)
+  proofUrl     String?  @map("proof_url")
+  nfcTagId     String?  @map("nfc_tag_id")
+  nfcTag       NfcTag?  @relation(fields: [nfcTagId], references: [id])
+  gpsLat       Float?   @map("gps_lat")
+  gpsLng       Float?   @map("gps_lng")
+  flagged      Boolean  @default(false)
+  completedAt  DateTime @map("completed_at")
+  ipAddress    String?  @map("ip_address")
+
+  @@map("task_completions")
+}
+
+// NFC
+model NfcTag {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  user         User      @relation(fields: [userId], references: [id])
+  nfcUid       String    @unique @map("nfc_uid") // Physical hash
+  label        String
+  latitude     Float
+  longitude    Float
+  radiusMeters Int       @default(100) @map("radius_meters")
+  
+  // PRD says "linked_task_ids" JSONB. But for Prisma we can do specific relation or explicit many-to-many.
+  // Let's support implicit M-N for cleaner schema or stick to JSON.
+  // "tasks Task[] @relation("TaskNfcTags")" would create a join table.
+  // Given PRD explicit JSONB, I will add a tasks relation which is better.
+  tasks        Task[]    @relation("TaskNfcTags")
+  
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  completions  TaskCompletion[]
+
+  @@map("nfc_tags")
+}
+
+// Social
+model Friendship {
+  id           String           @id @default(uuid())
+  requesterId  String           @map("requester_id")
+  requester    User             @relation("SentFriendships", fields: [requesterId], references: [id])
+  addresseeId  String           @map("addressee_id")
+  addressee    User             @relation("ReceivedFriendships", fields: [addresseeId], references: [id])
+  status       FriendshipStatus
+  createdAt    DateTime         @default(now()) @map("created_at")
+
+  @@map("friendships")
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  BLOCKED
+}
+
+model Guild {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  avatarUrl   String?   @map("avatar_url")
+  leaderId    String    @unique @map("leader_id")
+  leader      User      @relation("GuildLeader", fields: [leaderId], references: [id])
+  maxMembers  Int       @default(30) @map("max_members")
+  totalXp     BigInt    @default(0) @map("total_xp")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  members     GuildMember[]
+  quests      GuildQuest[]
+  messages    ChatMessage[]
+  
+  @@map("guilds")
+}
+
+model GuildMember {
+  id             String    @id @default(uuid())
+  guildId        String    @map("guild_id")
+  guild          Guild     @relation(fields: [guildId], references: [id])
+  userId         String    @map("user_id")
+  user           User      @relation(fields: [userId], references: [id])
+  role           GuildRole
+  joinedAt       DateTime  @default(now()) @map("joined_at")
+  xpContributed  BigInt    @default(0) @map("xp_contributed")
+
+  @@map("guild_members")
+}
+
+enum GuildRole {
+  LEADER
+  OFFICER
+  MEMBER
+}
+
+model GuildQuest {
+  id             String      @id @default(uuid())
+  guildId        String      @map("guild_id")
+  guild          Guild       @relation(fields: [guildId], references: [id])
+  title          String
+  description    String?
+  xpTarget       BigInt      @map("xp_target")
+  xpCurrent      BigInt      @default(0) @map("xp_current")
+  rewardXpBonus  Int         @map("reward_xp_bonus")
+  startsAt       DateTime    @map("starts_at")
+  endsAt         DateTime    @map("ends_at")
+  status         QuestStatus
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  @@map("guild_quests")
+}
+
+enum QuestStatus {
+  ACTIVE
+  COMPLETED
+  FAILED
+}
+
+model Challenge {
+  id           String          @id @default(uuid())
+  type         ChallengeType
+  challengerId String          @map("challenger_id") 
+  challenger   User            @relation("ChallengerUser", fields: [challengerId], references: [id]) 
+  // Note: PRD says Challenger can be Guild. Prisma doesn't support Polymorphic relations easily. 
+  // For MVP we assume User challenges. Guild challenges would need separate table or optional fields.
+  // We'll stick to User for now as per schema "challenger_id FK users OR guilds" -> implementation detail : usually separate columns or tables.
+  
+  challengedId String          @map("challenged_id")
+  challenged   User            @relation("ChallengedUser", fields: [challengedId], references: [id])
+
+  taskId       String?         @map("task_id")
+  task         Task?           @relation(fields: [taskId], references: [id])
+  
+  status       ChallengeStatus
+  winnerId     String?         @map("winner_id")
+  winner       User?           @relation("ChallengeWinner", fields: [winnerId], references: [id])
+
+  startsAt     DateTime        @map("starts_at")
+  endsAt       DateTime        @map("ends_at")
+  createdAt    DateTime        @default(now()) @map("created_at")
+
+  @@map("challenges")
+}
+
+enum ChallengeType {
+  DUEL
+  GUILD_VS_GUILD
+}
+
+enum ChallengeStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  DECLINED
+}
+
+model ChatMessage {
+  id        String    @id @default(uuid())
+  guildId   String    @map("guild_id")
+  guild     Guild     @relation(fields: [guildId], references: [id])
+  senderId  String    @map("sender_id")
+  sender    User      @relation(fields: [senderId], references: [id])
+  content   String    // Encrypted in app logic
+  createdAt DateTime  @default(now()) @map("created_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("chat_messages")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String           @map("user_id")
+  user      User             @relation(fields: [userId], references: [id])
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  read      Boolean          @default(false)
+  sentAt    DateTime         @default(now()) @map("sent_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  @@map("notifications")
+}
+
+enum NotificationType {
+  STREAK_WARNING
+  LEVEL_UP
+  FRIEND_REQUEST
+  GUILD_INVITE
+  CHALLENGE
+  NUDGE
+  REMINDER
+}
+
+// Gamification
+model Achievement {
+  id          String @id @default(uuid())
+  name        String @unique
+  description String?
+  iconUrl     String? @map("icon_url")
+  condition   Json    // e.g. {"type": "streak", "value": 30}
+  xpReward    Int     @map("xp_reward")
+
+  userAchievements UserAchievement[]
+
+  @@map("achievements")
+}
+
+model UserAchievement {
+  id            String      @id @default(uuid())
+  userId        String      @map("user_id")
+  user          User        @relation(fields: [userId], references: [id])
+  achievementId String      @map("achievement_id")
+  achievement   Achievement @relation(fields: [achievementId], references: [id])
+  unlockedAt    DateTime    @default(now()) @map("unlocked_at")
+
+  @@map("user_achievements")
+}
+
+model FraudFlag {
+  id          String     @id @default(uuid())
+  userId      String     @map("user_id")
+  user        User       @relation("UserFlags", fields: [userId], references: [id])
+  flagType    FraudType  @map("flag_type")
+  severity    Severity
+  details     Json?
+  resolved    Boolean    @default(false)
+  resolvedBy  String?    @map("resolved_by")
+  resolver    User?      @relation("ResolverFlags", fields: [resolvedBy], references: [id])
+  createdAt   DateTime   @default(now()) @map("created_at")
+
+  @@map("fraud_flags")
+}
+
+enum FraudType {
+  RATE_ABUSE
+  SUSPICIOUS_TIME
+  PATTERN_ANOMALY
+  COMMUNITY_REPORT
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Season {
+  id             String   @id @default(uuid())
+  name           String
+  themeStat      TaskCategory? @map("theme_stat")
+  xpBonusPercent Int      @map("xp_bonus_percent")
+  startsAt       DateTime @map("starts_at")
+  endsAt         DateTime @map("ends_at")
+  isActive       Boolean  @default(false) @map("is_active")
+  rewards        Json     // Rewards per tier
+
+  progress       SeasonProgress[]
+  shopItems      ShopItem[]
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("seasons")
+}
+
+model SeasonProgress {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  user           User     @relation(fields: [userId], references: [id])
+  seasonId       String   @map("season_id")
+  season         Season   @relation(fields: [seasonId], references: [id])
+  seasonXp       BigInt   @default(0) @map("season_xp")
+  tierReached    Int      @default(0) @map("tier_reached")
+  rewardsClaimed Json     @map("rewards_claimed")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("season_progress")
+}
+
+model TalentTree {
+  id                 String       @id @default(uuid())
+  stat               TaskCategory
+  name               String
+  description        String?
+  tier               Int          // 1, 2, 3
+  requiredStatLevel  Int          @map("required_stat_level")
+  prerequisiteTalentId String?    @map("prerequisite_talent_id")
+  prerequisite       TalentTree?  @relation("TalentPrerequisite", fields: [prerequisiteTalentId], references: [id])
+  dependents         TalentTree[] @relation("TalentPrerequisite")
+  effect             Json
+  createdAt          DateTime     @default(now()) @map("created_at")
+
+  userTalents        UserTalent[]
+
+  @@unique([stat, name], name: "stat_name")
+  @@map("talent_trees")
+}
+
+model UserTalent {
+  id          String       @id @default(uuid())
+  userId      String       @map("user_id")
+  user        User         @relation(fields: [userId], references: [id])
+  talentId    String       @map("talent_id")
+  talent      TalentTree   @relation(fields: [talentId], references: [id])
+  stat        TaskCategory
+  unlockedAt  DateTime     @default(now()) @map("unlocked_at")
+
+  @@unique([userId, talentId])
+  @@map("user_talents")
+}
+
+model ShopItem {
+  id           String          @id @default(uuid())
+  name         String
+  description  String?
+  category     ShopCategory
+  priceGc      Int             @map("price_gc")
+  iconUrl      String?         @map("icon_url")
+  effect       Json?
+  seasonId     String?         @map("season_id")
+  season       Season?         @relation(fields: [seasonId], references: [id])
+  maxPurchases Int?            @map("max_purchases")
+  isActive     Boolean         @default(true) @map("is_active")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  
+  inventory    UserInventory[]
+
+  @@map("shop_items")
+}
+
+enum ShopCategory {
+  AVATAR
+  TITLE
+  THEME
+  BOOST
+}
+
+model UserInventory {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  user        User      @relation(fields: [userId], references: [id])
+  itemId      String    @map("item_id")
+  item        ShopItem  @relation(fields: [itemId], references: [id])
+  isEquipped  Boolean   @default(false) @map("is_equipped")
+  purchasedAt DateTime  @default(now()) @map("purchased_at")
+  expiresAt   DateTime? @map("expires_at")
+
+  @@unique([userId, itemId]) // For non-stackable
+  @@map("user_inventory")
+}
+
+model UserWallet {
+  id        String   @id @default(uuid())
+  userId    String   @unique @map("user_id")
+  user      User     @relation(fields: [userId], references: [id])
+  goldCoins Int      @default(0) @map("gold_coins")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("user_wallet")
+}
+
+model WalletTransaction {
+  id          String            @id @default(uuid())
+  userId      String            @map("user_id")
+  user        User              @relation(fields: [userId], references: [id])
+  amount      Int
+  reason      TransactionReason
+  referenceId String?           @map("reference_id")
+  createdAt   DateTime          @default(now()) @map("created_at")
+
+  @@map("wallet_transactions")
+}
+
+enum TransactionReason {
+  TASK_COMPLETION
+  ACHIEVEMENT
+  DUEL_WIN
+  GUILD_QUEST
+  SEASON_REWARD
+  SHOP_PURCHASE
+}
+
+model HardcoreSettings {
+  id            String    @id @default(uuid())
+  userId        String    @unique @map("user_id")
+  user          User      @relation(fields: [userId], references: [id])
+  isActive      Boolean   @default(false) @map("is_active")
+  activatedAt   DateTime? @map("activated_at")
+  deactivatedAt DateTime? @map("deactivated_at")
+  cooldownUntil DateTime? @map("cooldown_until")
+  deathCount    Int       @default(0) @map("death_count")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@map("hardcore_settings")
+}

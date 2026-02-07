@@ -1,0 +1,38 @@
+{
+  "name": "lifeup",
+  "version": "1.0.0",
+  "description": "Doing daily tasks is boring ? Life up by gamifying it !",
+  "private": true,
+  "packageManager": "npm@10.9.2",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "dev": "turbo run dev",
+    "prepare": "husky"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Lukasambry/LifeUp.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Lukasambry/LifeUp/issues"
+  },
+  "homepage": "https://github.com/Lukasambry/LifeUp#readme",
+  "lint-staged": {
+    "packages/backend/**/*.ts": "eslint --fix --config packages/backend/eslint.config.mjs",
+    "packages/web-admin/**/*.{ts,tsx}": "eslint --fix --config packages/web-admin/eslint.config.mjs",
+    "packages/mobile/**/*.{ts,tsx}": "eslint --fix --config packages/mobile/eslint.config.mjs"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "turbo": "^2.8.3"
+  }
+}

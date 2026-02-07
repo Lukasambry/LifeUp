@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: lifeup-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: lifeup
+      POSTGRES_PASSWORD: lifeup_password
+      POSTGRES_DB: lifeup_db
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - lifeup-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: lifeup-redis
+    restart: always
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - lifeup-network
+  # Backend and Web Admin will be run locally via npm for dev experience (Hot Reload)
+  # but we can add them here later for full stack testing.
+
+volumes:
+  postgres_data:
+  redis_data:
+
+
+networks:
+  lifeup-network:
+    driver: bridge
