@@ -10,6 +10,7 @@ import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/index';
 import { RedisService } from '../redis/index';
+import { MailService } from '../mail/index';
 import { RegisterDto, LoginDto } from './dto/index';
 
 const BCRYPT_ROUNDS = 12;
@@ -32,6 +33,7 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly redis: RedisService,
+    private readonly mail: MailService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -193,9 +195,7 @@ export class AuthService {
       RESET_TOKEN_EXPIRY_SECONDS,
     );
 
-    if (this.config.get('NODE_ENV') === 'development') {
-      console.log(`[DEV] Password reset token for ${email}: ${token}`);
-    }
+    await this.mail.sendPasswordReset(email, token);
 
     return { message: 'If the email exists, a reset link has been sent.' };
   }

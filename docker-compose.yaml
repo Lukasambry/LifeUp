@@ -24,6 +24,16 @@ services:
       - redis_data:/data
     networks:
       - lifeup-network
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: lifeup-mailpit
+    restart: always
+    ports:
+      - "8025:8025"   # Web UI
+      - "1025:1025"   # SMTP
+    networks:
+      - lifeup-network
+
   # Backend and Web Admin will be run locally via npm for dev experience (Hot Reload)
   # but we can add them here later for full stack testing.
 

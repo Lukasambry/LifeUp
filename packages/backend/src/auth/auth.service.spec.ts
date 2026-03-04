@@ -6,6 +6,7 @@ import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma';
 import { RedisService } from '../redis';
+import { MailService } from '../mail';
 
 jest.mock('bcrypt');
 
@@ -40,6 +41,11 @@ const mockConfig = {
   }),
 };
 
+const mockMail = {
+  sendPasswordReset: jest.fn().mockResolvedValue(undefined),
+  sendMagicLink: jest.fn().mockResolvedValue(undefined),
+};
+
 describe('AuthService', () => {
   let service: AuthService;
 
@@ -51,6 +57,7 @@ describe('AuthService', () => {
         { provide: RedisService, useValue: mockRedis },
         { provide: JwtService, useValue: mockJwt },
         { provide: ConfigService, useValue: mockConfig },
+        { provide: MailService, useValue: mockMail },
       ],
     }).compile();
 
@@ -229,7 +236,7 @@ describe('AuthService', () => {
       expect(result.message).toContain('If the email exists');
     });
 
-    it('should create a reset token in Redis', async () => {
+    it('should create a reset token in Redis and send email', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({ id: 'uuid-1', deletedAt: null });
       mockRedis.set.mockResolvedValue(undefined);
 
@@ -240,6 +247,18 @@ describe('AuthService', () => {
         'uuid-1',
         900,
       );
+      expect(mockMail.sendPasswordReset).toHaveBeenCalledWith(
+        'test@example.com',
+        expect.any(String),
+      );
+    });
+
+    it('should NOT send email if user does not exist', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+
+      await service.forgotPassword('ghost@example.com');
+
+      expect(mockMail.sendPasswordReset).not.toHaveBeenCalled();
     });
   });
 

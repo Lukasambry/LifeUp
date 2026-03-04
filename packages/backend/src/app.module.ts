@@ -6,6 +6,7 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma';
 import { RedisModule } from './redis';
 import { AuthModule } from './auth';
+import { MailModule } from './mail';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { AuthModule } from './auth';
     }),
     PrismaModule,
     RedisModule,
+    MailModule,
     AuthModule,
   ],
   controllers: [AppController],
