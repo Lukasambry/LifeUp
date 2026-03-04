@@ -44,9 +44,11 @@ REDIS_URL="redis://localhost:6380"
 ```
 
 ```bash
-# Appliquer les migrations et le seed
-npx prisma migrate dev --schema packages/backend/prisma/schema.prisma
-npx prisma db seed --schema packages/backend/prisma/schema.prisma
+# Appliquer les migrations et le seed (depuis packages/backend/)
+cd packages/backend
+npx prisma migrate dev
+npx prisma db seed
+cd ../..
 ```
 
 ## Commandes
@@ -82,15 +84,16 @@ npm run test:e2e -w packages/backend      # Tests E2E
 
 ### Prisma
 
+> Toutes les commandes Prisma doivent être lancées depuis `packages/backend/` (où se trouvent `prisma.config.ts` et `.env`).
+
 ```bash
-# Générer le client Prisma
-npx prisma generate --schema packages/backend/prisma/schema.prisma
+cd packages/backend
 
-# Créer une migration
-npx prisma migrate dev --name nom_migration --schema packages/backend/prisma/schema.prisma
-
-# Ouvrir Prisma Studio
-npx prisma studio --schema packages/backend/prisma/schema.prisma
+npx prisma generate
+npx prisma migrate dev
+npx prisma migrate dev --name nom_migration
+npx prisma db seed
+npx prisma studio
 ```
 
 ## Structure du projet
