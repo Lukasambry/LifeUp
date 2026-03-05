@@ -10,6 +10,16 @@ interface SendMailOptions {
   text?: string;
 }
 
+interface MailSentInfo {
+  messageId: string;
+  message?: string; // JSON transport only
+}
+
+interface ParsedJsonMail {
+  to: string | string[];
+  subject: string;
+}
+
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
@@ -55,12 +65,14 @@ export class MailService {
     };
 
     try {
-      const info = await this.transporter.sendMail(mailOptions);
+      const info = (await this.transporter.sendMail(
+        mailOptions,
+      )) as MailSentInfo;
 
       if (!this.config.get<string>('SMTP_HOST')) {
-        const parsed = JSON.parse(info.message);
+        const parsed = JSON.parse(info.message ?? '{}') as ParsedJsonMail;
         this.logger.debug(
-          `[DEV MAIL] To: ${parsed.to} | Subject: ${parsed.subject}`,
+          `[DEV MAIL] To: ${String(parsed.to)} | Subject: ${parsed.subject}`,
         );
         this.logger.debug(`[DEV MAIL] Body:\n${options.text || options.html}`);
       } else {

@@ -3,3 +3,7 @@ export { LoginDto } from './login.dto';
 export { ForgotPasswordDto } from './forgot-password.dto';
 export { ResetPasswordDto } from './reset-password.dto';
 export { RefreshTokenDto } from './refresh-token.dto';
+export { GoogleAuthDto } from './google-auth.dto';
+export { AppleAuthDto } from './apple-auth.dto';
+export { MagicLinkRequestDto } from './magic-link-request.dto';
+export { MagicLinkVerifyDto } from './magic-link-verify.dto';

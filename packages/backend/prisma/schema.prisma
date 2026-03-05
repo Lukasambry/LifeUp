@@ -10,7 +10,8 @@ model User {
   id                     String              @id @default(uuid())
   email                  String              @unique
   username               String              @unique
-  passwordHash           String              @map("password_hash")
+  passwordHash           String?             @map("password_hash")
+  bio                    String?
   ssoProvider            SSOProvider?        @map("sso_provider")
   ssoId                  String?             @map("sso_id")
   avatarUrl              String?             @map("avatar_url")
