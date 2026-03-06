@@ -2,6 +2,11 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 
+(BigInt.prototype as unknown as { toJSON: (this: bigint) => string }).toJSON =
+  function (this: bigint) {
+    return this.toString();
+  };
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
@@ -23,4 +28,4 @@ async function bootstrap() {
 
   await app.listen(process.env.PORT ?? 3000);
 }
-bootstrap();
+void bootstrap();

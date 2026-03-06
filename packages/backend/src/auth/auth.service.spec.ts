@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import {
+  ConflictException,
+  UnauthorizedException,
+  BadRequestException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
@@ -66,7 +70,11 @@ describe('AuthService', () => {
   });
 
   describe('register', () => {
-    const dto = { email: 'test@example.com', username: 'testuser', password: 'MyP@ssw0rd123' };
+    const dto = {
+      email: 'test@example.com',
+      username: 'testuser',
+      password: 'MyP@ssw0rd123',
+    };
 
     it('should register a new user and return tokens', async () => {
       mockPrisma.user.findFirst.mockResolvedValue(null);
@@ -78,7 +86,9 @@ describe('AuthService', () => {
         level: 1,
         createdAt: new Date(),
       });
-      mockJwt.signAsync.mockResolvedValueOnce('access-token').mockResolvedValueOnce('refresh-token');
+      mockJwt.signAsync
+        .mockResolvedValueOnce('access-token')
+        .mockResolvedValueOnce('refresh-token');
       mockRedis.set.mockResolvedValue(undefined);
 
       const result = await service.register(dto);
@@ -90,18 +100,23 @@ describe('AuthService', () => {
     });
 
     it('should throw ConflictException if email already exists', async () => {
-      mockPrisma.user.findFirst.mockResolvedValue({ email: dto.email, username: 'other' });
+      mockPrisma.user.findFirst.mockResolvedValue({
+        email: dto.email,
+        username: 'other',
+      });
 
       await expect(service.register(dto)).rejects.toThrow(ConflictException);
     });
 
     it('should throw ConflictException if username already exists', async () => {
-      mockPrisma.user.findFirst.mockResolvedValue({ email: 'other@test.com', username: dto.username });
+      mockPrisma.user.findFirst.mockResolvedValue({
+        email: 'other@test.com',
+        username: dto.username,
+      });
 
       await expect(service.register(dto)).rejects.toThrow(ConflictException);
     });
   });
-
 
   describe('login', () => {
     const dto = { email: 'test@example.com', password: 'MyP@ssw0rd123' };
@@ -120,7 +135,9 @@ describe('AuthService', () => {
     it('should login and return tokens', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(mockUser);
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
-      mockJwt.signAsync.mockResolvedValueOnce('access-token').mockResolvedValueOnce('refresh-token');
+      mockJwt.signAsync
+        .mockResolvedValueOnce('access-token')
+        .mockResolvedValueOnce('refresh-token');
       mockRedis.set.mockResolvedValue(undefined);
 
       const result = await service.login(dto);
@@ -165,8 +182,8 @@ describe('AuthService', () => {
         expect.objectContaining({
           data: expect.objectContaining({
             failedLoginAttempts: 5,
-            lockedUntil: expect.any(Date),
-          }),
+            lockedUntil: expect.any(Date) as unknown as Date,
+          }) as unknown as { failedLoginAttempts: number; lockedUntil: Date },
         }),
       );
     });
@@ -197,20 +214,27 @@ describe('AuthService', () => {
 
       const result = await service.logout('uuid-1', 'some-refresh-token');
 
-      expect(mockRedis.del).toHaveBeenCalledWith('refresh:uuid-1:some-refresh-token');
+      expect(mockRedis.del).toHaveBeenCalledWith(
+        'refresh:uuid-1:some-refresh-token',
+      );
       expect(result.message).toBe('Logged out successfully');
     });
   });
 
-
   describe('refresh', () => {
     it('should rotate tokens when refresh token is valid', async () => {
-      const payload = { sub: 'uuid-1', email: 'test@example.com', username: 'testuser' };
+      const payload = {
+        sub: 'uuid-1',
+        email: 'test@example.com',
+        username: 'testuser',
+      };
       mockJwt.verify.mockReturnValue(payload);
       mockRedis.get.mockResolvedValue('valid');
       mockRedis.del.mockResolvedValue(undefined);
       mockRedis.set.mockResolvedValue(undefined);
-      mockJwt.signAsync.mockResolvedValueOnce('new-access').mockResolvedValueOnce('new-refresh');
+      mockJwt.signAsync
+        .mockResolvedValueOnce('new-access')
+        .mockResolvedValueOnce('new-refresh');
 
       const result = await service.refresh('old-refresh-token');
 
@@ -220,10 +244,16 @@ describe('AuthService', () => {
     });
 
     it('should throw if refresh token is revoked', async () => {
-      mockJwt.verify.mockReturnValue({ sub: 'uuid-1', email: 'a@b.com', username: 'u' });
+      mockJwt.verify.mockReturnValue({
+        sub: 'uuid-1',
+        email: 'a@b.com',
+        username: 'u',
+      });
       mockRedis.get.mockResolvedValue(null);
 
-      await expect(service.refresh('revoked-token')).rejects.toThrow(UnauthorizedException);
+      await expect(service.refresh('revoked-token')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 
@@ -237,7 +267,10 @@ describe('AuthService', () => {
     });
 
     it('should create a reset token in Redis and send email', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'uuid-1', deletedAt: null });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'uuid-1',
+        deletedAt: null,
+      });
       mockRedis.set.mockResolvedValue(undefined);
 
       await service.forgotPassword('test@example.com');
@@ -269,7 +302,10 @@ describe('AuthService', () => {
       mockPrisma.user.update.mockResolvedValue({});
       mockRedis.del.mockResolvedValue(undefined);
 
-      const result = await service.resetPassword('valid-token', 'NewP@ssw0rd123');
+      const result = await service.resetPassword(
+        'valid-token',
+        'NewP@ssw0rd123',
+      );
 
       expect(result.message).toBe('Password reset successfully');
       expect(mockPrisma.user.update).toHaveBeenCalledWith(
@@ -278,7 +314,11 @@ describe('AuthService', () => {
             passwordHash: 'new_hashed_password',
             failedLoginAttempts: 0,
             lockedUntil: null,
-          }),
+          }) as unknown as {
+            passwordHash: string;
+            failedLoginAttempts: number;
+            lockedUntil: null;
+          },
         }),
       );
       expect(mockRedis.del).toHaveBeenCalledWith('reset:valid-token');
@@ -287,8 +327,9 @@ describe('AuthService', () => {
     it('should throw BadRequestException for invalid token', async () => {
       mockRedis.get.mockResolvedValue(null);
 
-      await expect(service.resetPassword('invalid-token', 'NewP@ssw0rd123'))
-        .rejects.toThrow(BadRequestException);
+      await expect(
+        service.resetPassword('invalid-token', 'NewP@ssw0rd123'),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 });

@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import {
   RegisterDto,
@@ -13,6 +14,10 @@ import {
   ForgotPasswordDto,
   ResetPasswordDto,
   RefreshTokenDto,
+  GoogleAuthDto,
+  AppleAuthDto,
+  MagicLinkRequestDto,
+  MagicLinkVerifyDto,
 } from './dto/index';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
@@ -27,6 +32,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @HttpCode(HttpStatus.OK)
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto);
@@ -35,10 +41,7 @@ export class AuthController {
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  logout(
-    @CurrentUser('id') userId: string,
-    @Body() body: RefreshTokenDto,
-  ) {
+  logout(@CurrentUser('id') userId: string, @Body() body: RefreshTokenDto) {
     return this.auth.logout(userId, body.refreshToken);
   }
 
@@ -49,6 +52,7 @@ export class AuthController {
   }
 
   @Post('forgot-password')
+  @Throttle({ default: { ttl: 60_000, limit: 3 } })
   @HttpCode(HttpStatus.OK)
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.auth.forgotPassword(dto.email);
@@ -58,5 +62,35 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.auth.resetPassword(dto.token, dto.newPassword);
+  }
+
+  @Post('google')
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  @HttpCode(HttpStatus.OK)
+  loginWithGoogle(@Body() dto: GoogleAuthDto) {
+    return this.auth.loginWithGoogle(dto.idToken);
+  }
+
+  @Post('apple')
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  @HttpCode(HttpStatus.OK)
+  loginWithApple(@Body() dto: AppleAuthDto) {
+    return this.auth.loginWithApple(dto.identityToken, {
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+    });
+  }
+
+  @Post('magic-link/request')
+  @Throttle({ default: { ttl: 60_000, limit: 3 } })
+  @HttpCode(HttpStatus.OK)
+  requestMagicLink(@Body() dto: MagicLinkRequestDto) {
+    return this.auth.requestMagicLink(dto.email);
+  }
+
+  @Post('magic-link/verify')
+  @HttpCode(HttpStatus.OK)
+  verifyMagicLink(@Body() dto: MagicLinkVerifyDto) {
+    return this.auth.verifyMagicLink(dto.token);
   }
 }

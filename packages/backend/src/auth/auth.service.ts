@@ -8,6 +8,8 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
+import { OAuth2Client } from 'google-auth-library';
+import * as appleSignin from 'apple-signin-auth';
 import { PrismaService } from '../prisma/index';
 import { RedisService } from '../redis/index';
 import { MailService } from '../mail/index';
@@ -17,6 +19,7 @@ const BCRYPT_ROUNDS = 12;
 const ACCESS_TOKEN_EXPIRY = '15m';
 const REFRESH_TOKEN_EXPIRY = '7d';
 const RESET_TOKEN_EXPIRY_SECONDS = 15 * 60;
+const MAGIC_LINK_EXPIRY_SECONDS = 15 * 60;
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MINUTES = 15;
 
@@ -94,6 +97,9 @@ export class AuthService {
         `Account locked. Try again in ${minutesLeft} minute(s).`,
       );
     }
+
+    if (!user.passwordHash)
+      throw new UnauthorizedException('Invalid credentials');
 
     const passwordValid = await bcrypt.compare(dto.password, user.passwordHash);
 
@@ -189,11 +195,7 @@ export class AuthService {
     }
 
     const token = randomBytes(32).toString('hex');
-    await this.redis.set(
-      `reset:${token}`,
-      user.id,
-      RESET_TOKEN_EXPIRY_SECONDS,
-    );
+    await this.redis.set(`reset:${token}`, user.id, RESET_TOKEN_EXPIRY_SECONDS);
 
     await this.mail.sendPasswordReset(email, token);
 
@@ -223,6 +225,187 @@ export class AuthService {
     return { message: 'Password reset successfully' };
   }
 
+  async loginWithGoogle(idToken: string) {
+    const googleClientId = this.config.get<string>('GOOGLE_CLIENT_ID');
+    const client = new OAuth2Client(googleClientId);
+
+    let payload: ReturnType<
+      import('google-auth-library').LoginTicket['getPayload']
+    >;
+    try {
+      const ticket = await client.verifyIdToken({
+        idToken,
+        audience: googleClientId,
+      });
+      payload = ticket.getPayload();
+    } catch {
+      throw new UnauthorizedException('Invalid Google token');
+    }
+    if (!payload)
+      throw new UnauthorizedException('Invalid Google token payload');
+
+    const { sub: ssoId, email, picture: avatarUrl, given_name } = payload;
+
+    let user = await this.prisma.user.findFirst({
+      where: {
+        OR: [{ ssoId, ssoProvider: 'GOOGLE' }, ...(email ? [{ email }] : [])],
+      },
+    });
+
+    if (user && (!user.ssoId || user.ssoProvider !== 'GOOGLE')) {
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          ssoId,
+          ssoProvider: 'GOOGLE',
+          avatarUrl: avatarUrl ?? undefined,
+        },
+      });
+    }
+
+    if (!user) {
+      const username = `${given_name ?? 'user'}_${randomBytes(4).toString('hex')}`;
+      user = await this.prisma.user.create({
+        data: {
+          email: email!,
+          username,
+          passwordHash: null,
+          ssoProvider: 'GOOGLE',
+          ssoId,
+          avatarUrl,
+          stats: { create: {} },
+          wallet: { create: {} },
+        },
+      });
+    }
+
+    const tokens = await this.generateTokens({
+      sub: user.id,
+      email: user.email,
+      username: user.username,
+    });
+
+    return {
+      ...tokens,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        level: user.level,
+        avatarUrl: user.avatarUrl,
+      },
+    };
+  }
+
+  async loginWithApple(
+    identityToken: string,
+    name?: { firstName?: string; lastName?: string },
+  ) {
+    const appleClientId = this.config.get<string>('APPLE_CLIENT_ID');
+
+    let applePayload: { sub: string; email?: string };
+    try {
+      applePayload = await appleSignin.verifyIdToken(identityToken, {
+        audience: appleClientId,
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid Apple token');
+    }
+
+    const { sub: ssoId, email } = applePayload;
+
+    let user = await this.prisma.user.findFirst({
+      where: {
+        OR: [{ ssoId, ssoProvider: 'APPLE' }, ...(email ? [{ email }] : [])],
+      },
+    });
+
+    if (!user && !email) {
+      throw new UnauthorizedException(
+        'Email not available. Please sign in with Apple again.',
+      );
+    }
+
+    if (user && (!user.ssoId || user.ssoProvider !== 'APPLE')) {
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: { ssoId, ssoProvider: 'APPLE' },
+      });
+    }
+
+    if (!user) {
+      const firstName = name?.firstName ?? 'user';
+      const username = `${firstName}_${randomBytes(4).toString('hex')}`;
+      user = await this.prisma.user.create({
+        data: {
+          email: email!,
+          username,
+          passwordHash: null,
+          ssoProvider: 'APPLE',
+          ssoId,
+          stats: { create: {} },
+          wallet: { create: {} },
+        },
+      });
+    }
+
+    const tokens = await this.generateTokens({
+      sub: user.id,
+      email: user.email,
+      username: user.username,
+    });
+
+    return {
+      ...tokens,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        level: user.level,
+      },
+    };
+  }
+
+  async requestMagicLink(email: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+
+    if (user && !user.deletedAt) {
+      const token = randomBytes(32).toString('hex');
+      await this.redis.set(`magic:${token}`, email, MAGIC_LINK_EXPIRY_SECONDS);
+      await this.mail.sendMagicLink(email, token);
+    }
+
+    return { message: 'If the email exists, a magic link has been sent.' };
+  }
+
+  async verifyMagicLink(token: string) {
+    const email = await this.redis.get(`magic:${token}`);
+    if (!email)
+      throw new BadRequestException('Invalid or expired magic link token');
+
+    await this.redis.del(`magic:${token}`);
+
+    let user = await this.prisma.user.findUnique({ where: { email } });
+
+    if (!user) {
+      const username = `user_${randomBytes(4).toString('hex')}`;
+      user = await this.prisma.user.create({
+        data: {
+          email,
+          username,
+          passwordHash: null,
+          stats: { create: {} },
+          wallet: { create: {} },
+        },
+      });
+    }
+
+    return this.generateTokens({
+      sub: user.id,
+      email: user.email,
+      username: user.username,
+    });
+  }
 
   private async generateTokens(payload: TokenPayload) {
     const [accessToken, refreshToken] = await Promise.all([
