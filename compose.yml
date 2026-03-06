@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: lifeup-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lifeup
+      POSTGRES_PASSWORD: lifeup_password
+      POSTGRES_DB: lifeup_db
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - lifeup-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lifeup -d lifeup_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: lifeup-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - lifeup-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: lifeup-mailpit
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    networks:
+      - lifeup-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  lifeup-network:
+    driver: bridge

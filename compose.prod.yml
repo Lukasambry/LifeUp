@@ -1,0 +1,142 @@
+services:
+
+
+  traefik:
+    image: traefik:v3
+    container_name: lifeup-traefik-prod
+    restart: always
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:?ACME_EMAIL requis}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--api.dashboard=false"
+      - "--log.level=WARN"
+      - "--accesslog=true"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - letsencrypt:/letsencrypt
+    networks:
+      - lifeup-network
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: lifeup-postgres-prod
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER requis}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requis}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB requis}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - lifeup-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  redis:
+    image: redis:7-alpine
+    container_name: lifeup-redis-prod
+    restart: always
+    command: redis-server --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD requis} --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - lifeup-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+
+  backend:
+    image: ghcr.io/lukasambry/lifeup-backend:${IMAGE_TAG:?IMAGE_TAG requis}
+    container_name: lifeup-backend-prod
+    restart: always
+    env_file:
+      - packages/backend/.env.prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - lifeup-network
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=Host(`${API_DOMAIN:?API_DOMAIN requis}`)"
+      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.backend.loadbalancer.server.port=3000"
+
+
+  web-admin:
+    image: ghcr.io/lukasambry/lifeup-web-admin:${IMAGE_TAG:?IMAGE_TAG requis}
+    container_name: lifeup-web-admin-prod
+    restart: always
+    env_file:
+      - packages/web-admin/.env.prod
+    depends_on:
+      - backend
+    networks:
+      - lifeup-network
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.web-admin.rule=Host(`${ADMIN_DOMAIN:?ADMIN_DOMAIN requis}`)"
+      - "traefik.http.routers.web-admin.entrypoints=websecure"
+      - "traefik.http.routers.web-admin.tls.certresolver=letsencrypt"
+      - "traefik.http.services.web-admin.loadbalancer.server.port=3001"
+
+volumes:
+  postgres_data:
+  redis_data:
+  letsencrypt:
+
+networks:
+  lifeup-network:
+    driver: bridge

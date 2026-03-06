@@ -1,0 +1,116 @@
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: lifeup-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lifeup
+      POSTGRES_PASSWORD: lifeup_password
+      POSTGRES_DB: lifeup_db
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - lifeup-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lifeup -d lifeup_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: lifeup-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - lifeup-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: lifeup-mailpit
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    networks:
+      - lifeup-network
+
+  
+
+  backend:
+    image: node:22-alpine
+    container_name: lifeup-backend
+    restart: unless-stopped
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - backend_root_nm:/workspace/node_modules
+      - backend_pkg_nm:/workspace/packages/backend/node_modules
+    env_file:
+      - packages/backend/.env
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: "postgresql://lifeup:lifeup_password@postgres:5432/lifeup_db?schema=public"
+      REDIS_URL: "redis://redis:6379"
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_SECURE: "false"
+    ports:
+      - "3000:3000"
+    command: sh -c "npm ci && npm run start:dev -w packages/backend"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - lifeup-network
+
+
+  web-admin:
+    image: node:22-alpine
+    container_name: lifeup-web-admin
+    restart: unless-stopped
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - webadmin_root_nm:/workspace/node_modules
+      - webadmin_pkg_nm:/workspace/packages/web-admin/node_modules
+      - webadmin_next:/workspace/packages/web-admin/.next
+    env_file:
+      - packages/web-admin/.env
+    environment:
+      NODE_ENV: development
+      NEXTAUTH_URL: "http://localhost:3001"
+      NEXT_PUBLIC_API_URL: "http://localhost:3000/"
+    ports:
+      - "3001:3001"
+    command: sh -c "npm ci && npm run dev -w packages/web-admin"
+    depends_on:
+      - backend
+    networks:
+      - lifeup-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  backend_root_nm:
+  backend_pkg_nm:
+  webadmin_root_nm:
+  webadmin_pkg_nm:
+  webadmin_next:
+
+networks:
+  lifeup-network:
+    driver: bridge
