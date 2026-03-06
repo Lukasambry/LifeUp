@@ -1,11 +1,16 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
+  Query,
+  Param,
   UseGuards,
   HttpCode,
   HttpStatus,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import {
@@ -92,5 +97,34 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   verifyMagicLink(@Body() dto: MagicLinkVerifyDto) {
     return this.auth.verifyMagicLink(dto.token);
+  }
+
+  @Get('google/mobile')
+  async googleMobileInit(
+    @Query('sessionId') sessionId: string,
+    @Res() res: Response,
+  ) {
+    const url = await this.auth.buildGoogleOAuthUrl(sessionId);
+    res.redirect(url);
+  }
+
+  @Get('google/callback')
+  async googleCallback(
+    @Query('code') code: string,
+    @Query('state') sessionId: string,
+    @Res() res: Response,
+  ) {
+    await this.auth.handleGoogleCallback(code, sessionId);
+    res.send(`
+      <html><body style="font-family:sans-serif;text-align:center;padding:60px;background:#0F0F1A;color:#fff">
+        <h2>Connexion réussie !</h2>
+        <p style="color:#8B8BA7">Tu peux fermer cette fenêtre et retourner dans l'application.</p>
+      </body></html>
+    `);
+  }
+
+  @Get('google/status/:sessionId')
+  getGoogleAuthStatus(@Param('sessionId') sessionId: string) {
+    return this.auth.getGoogleAuthStatus(sessionId);
   }
 }

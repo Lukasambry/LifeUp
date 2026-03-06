@@ -1,7 +1,6 @@
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as SecureStore from 'expo-secure-store';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
+import { api } from '../services/api';
 
 export interface AuthUser {
   id: string;
@@ -13,6 +12,7 @@ export interface AuthUser {
 interface AuthResult {
   user: AuthUser;
   accessToken: string;
+  refreshToken: string;
 }
 
 export function useAppleSignIn(onSuccess: (result: AuthResult) => void) {
@@ -28,22 +28,16 @@ export function useAppleSignIn(onSuccess: (result: AuthResult) => void) {
       const { identityToken, fullName } = credential;
       if (!identityToken) throw new Error('No identity token from Apple');
 
-      const res = await fetch(`${API_URL}/auth/apple`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          identityToken,
-          firstName: fullName?.givenName,
-          lastName: fullName?.familyName,
-        }),
+      const res = await api.post('/auth/apple', {
+        identityToken,
+        firstName: fullName?.givenName,
+        lastName: fullName?.familyName,
       });
 
-      if (!res.ok) throw new Error(`Apple auth failed: ${res.status}`);
-      const data: { accessToken: string; refreshToken: string; user: AuthUser } = await res.json();
-
-      await SecureStore.setItemAsync('accessToken', data.accessToken);
-      await SecureStore.setItemAsync('refreshToken', data.refreshToken);
-      onSuccess({ user: data.user, accessToken: data.accessToken });
+      const { accessToken, refreshToken, user } = res.data;
+      await SecureStore.setItemAsync('accessToken', accessToken);
+      await SecureStore.setItemAsync('refreshToken', refreshToken);
+      onSuccess({ user, accessToken, refreshToken });
     } catch (err: unknown) {
       if ((err as { code?: string }).code !== 'ERR_REQUEST_CANCELED') {
         console.error('useAppleSignIn error:', err);

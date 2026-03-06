@@ -30,6 +30,10 @@
     "packages/web-admin/**/*.{ts,tsx}": "eslint --fix --config packages/web-admin/eslint.config.mjs",
     "packages/mobile/**/*.{ts,tsx}": "eslint --fix --config packages/mobile/eslint.config.mjs"
   },
+  "overrides": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
   "devDependencies": {
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",

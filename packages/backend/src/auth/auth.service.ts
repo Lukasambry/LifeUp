@@ -407,6 +407,60 @@ export class AuthService {
     });
   }
 
+  async buildGoogleOAuthUrl(sessionId: string): Promise<string> {
+    if (!sessionId) throw new BadRequestException('Missing sessionId');
+
+    const clientId = this.config.get<string>('GOOGLE_CLIENT_ID');
+    const backendUrl = this.config.get<string>('BACKEND_PUBLIC_URL');
+    const redirectUri = `${backendUrl}/auth/google/callback`;
+
+    const client = new OAuth2Client(
+      clientId,
+      this.config.get<string>('GOOGLE_CLIENT_SECRET'),
+      redirectUri,
+    );
+
+    await this.redis.set(`google-oauth:${sessionId}`, 'pending', 600);
+
+    return client.generateAuthUrl({
+      access_type: 'offline',
+      scope: ['openid', 'email', 'profile'],
+      state: sessionId,
+    });
+  }
+
+  async handleGoogleCallback(code: string, sessionId: string): Promise<void> {
+    const clientId = this.config.get<string>('GOOGLE_CLIENT_ID');
+    const backendUrl = this.config.get<string>('BACKEND_PUBLIC_URL');
+    const redirectUri = `${backendUrl}/auth/google/callback`;
+
+    const client = new OAuth2Client(
+      clientId,
+      this.config.get<string>('GOOGLE_CLIENT_SECRET'),
+      redirectUri,
+    );
+
+    const { tokens } = await client.getToken(code);
+    if (!tokens.id_token) throw new BadRequestException('No id_token');
+
+    const result = await this.loginWithGoogle(tokens.id_token);
+    await this.redis.set(
+      `google-oauth:${sessionId}`,
+      JSON.stringify({ status: 'complete', ...result }),
+      600,
+    );
+  }
+
+  async getGoogleAuthStatus(sessionId: string) {
+    const raw = await this.redis.get(`google-oauth:${sessionId}`);
+    if (!raw) return { status: 'not_found' };
+    if (raw === 'pending') return { status: 'pending' };
+
+    const result = JSON.parse(raw) as Record<string, unknown>;
+    await this.redis.del(`google-oauth:${sessionId}`);
+    return result;
+  }
+
   private async generateTokens(payload: TokenPayload) {
     const [accessToken, refreshToken] = await Promise.all([
       this.jwt.signAsync(payload, {
