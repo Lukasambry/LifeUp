@@ -49,6 +49,7 @@ yarn-error.log*
 *.key
 *.mobileprovision
 *.orig.*
+*.plist
 web-build/
 
 # Prisma
