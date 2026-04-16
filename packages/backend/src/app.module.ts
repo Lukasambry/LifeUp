@@ -10,6 +10,7 @@ import { RedisModule } from './redis';
 import { AuthModule } from './auth';
 import { MailModule } from './mail';
 import { UsersModule } from './users';
+import { TasksModule } from './tasks/tasks.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { UsersModule } from './users';
     MailModule,
     AuthModule,
     UsersModule,
+    TasksModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
